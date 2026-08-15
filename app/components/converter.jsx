@@ -147,220 +147,217 @@ export default function GpxToVcf() {
   return (
     <div
       style={{
-        minHeight: "100%",
-        background: "#0f1410",
-        color: "#e8ede6",
+        width: "100%",
+        maxWidth: 560,
+        margin: "0 auto",
+        color: "var(--text-primary)",
         fontFamily:
           "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
         padding: "32px 20px",
-        display: "flex",
-        justifyContent: "center",
       }}
     >
-      <div style={{ width: "100%", maxWidth: 560 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <Route size={22} color="#8fbf6f" strokeWidth={2} />
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 20,
-              fontWeight: 700,
-              letterSpacing: "0.02em",
-              color: "#f2f5ee",
-            }}
-          >
-            GPX → VCF
-          </h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <Route size={22} color="var(--accent)" strokeWidth={2} />
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            color: "var(--text-primary)",
+          }}
+        >
+          GPX → VCF
+        </h1>
+      </div>
+      <p style={{ margin: "0 0 26px", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+        Nahraj GPX trasu a stáhni body jako vizitky (.vcf) se souřadnicemi v poli GEO —
+        hodí se pro import do navigací a telefonů, které GPX neumí.
+      </p>
+
+      {!groups && (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          style={{
+            border: `1.5px dashed ${dragOver ? "var(--accent)" : "var(--panel-border)"}`,
+            borderRadius: 10,
+            padding: "40px 20px",
+            textAlign: "center",
+            cursor: "pointer",
+            background: dragOver ? "var(--accent-soft)" : "transparent",
+            transition: "border-color 120ms, background 120ms",
+          }}
+        >
+          <Upload size={26} color="var(--accent)" style={{ marginBottom: 10 }} />
+          <div style={{ fontSize: 14, color: "var(--text-primary)", marginBottom: 4 }}>
+            Přetáhni sem .gpx soubor
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>nebo klikni pro výběr</div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".gpx"
+            onChange={(e) => handleFile(e.target.files?.[0])}
+            style={{ display: "none" }}
+          />
         </div>
-        <p style={{ margin: "0 0 26px", fontSize: 13, color: "#9aa596", lineHeight: 1.5 }}>
-          Nahraj GPX trasu a stáhni body jako vizitky (.vcf) se souřadnicemi v poli GEO —
-          hodí se pro import do navigací a telefonů, které GPX neumí.
-        </p>
+      )}
 
-        {!groups && (
+      {error && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "var(--danger-bg)",
+            border: "1px solid var(--danger-border)",
+            color: "var(--danger-text)",
+            fontSize: 12.5,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {groups && (
+        <div>
           <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
             style={{
-              border: `1.5px dashed ${dragOver ? "#8fbf6f" : "#3a453a"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 14px",
               borderRadius: 10,
-              padding: "40px 20px",
-              textAlign: "center",
-              cursor: "pointer",
-              background: dragOver ? "rgba(143,191,111,0.06)" : "transparent",
-              transition: "border-color 120ms, background 120ms",
+              border: "1px solid var(--panel-border)",
+              background: "var(--card-bg)",
+              marginBottom: 16,
             }}
           >
-            <Upload size={26} color="#8fbf6f" style={{ marginBottom: 10 }} />
-            <div style={{ fontSize: 14, color: "#e8ede6", marginBottom: 4 }}>
-              Přetáhni sem .gpx soubor
-            </div>
-            <div style={{ fontSize: 12, color: "#6f7a6a" }}>nebo klikni pro výběr</div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".gpx"
-              onChange={(e) => handleFile(e.target.files?.[0])}
-              style={{ display: "none" }}
-            />
-          </div>
-        )}
-
-        {error && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "10px 12px",
-              borderRadius: 8,
-              background: "rgba(191,111,111,0.1)",
-              border: "1px solid rgba(191,111,111,0.35)",
-              color: "#e0a3a3",
-              fontSize: 12.5,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {groups && (
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "12px 14px",
-                borderRadius: 10,
-                border: "1px solid #2b332b",
-                background: "#141914",
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <FileText size={17} color="#8fbf6f" style={{ flexShrink: 0 }} />
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#f2f5ee",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {fileName}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "#6f7a6a", marginTop: 2 }}>
-                    {totalPoints} {totalPoints === 1 ? "bod" : totalPoints < 5 ? "body" : "bodů"}
-                  </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <FileText size={17} color="var(--accent)" style={{ flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "var(--text-primary)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {fileName}
+                </div>
+                <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
+                  {totalPoints} {totalPoints === 1 ? "bod" : totalPoints < 5 ? "body" : "bodů"}
                 </div>
               </div>
-              <button
-                onClick={reset}
-                aria-label="Zrušit soubor"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#6f7a6a",
-                  cursor: "pointer",
-                  padding: 4,
-                  flexShrink: 0,
-                }}
-              >
-                <X size={16} />
-              </button>
             </div>
-
-            <div
-              style={{
-                border: "1px solid #2b332b",
-                borderRadius: 10,
-                padding: "12px 14px",
-                marginBottom: 16,
-                maxHeight: 180,
-                overflowY: "auto",
-              }}
-            >
-              {groups.map((g, i) => (
-                <div key={i} style={{ marginBottom: i < groups.length - 1 ? 10 : 0 }}>
-                  <div style={{ fontSize: 12, color: "#8fbf6f", marginBottom: 4 }}>
-                    {g.kind}: {g.name} ({g.points.length})
-                  </div>
-                  {g.points.slice(0, 10).map((p, j) => (
-                    <div
-                      key={j}
-                      style={{
-                        fontSize: 11.5,
-                        color: "#8a948a",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        paddingLeft: 4,
-                      }}
-                    >
-                      <MapPin size={11} />
-                      {p.label} · {Number(p.lat).toFixed(5)}, {Number(p.lon).toFixed(5)}
-                    </div>
-                  ))}
-                  {g.points.length > 10 && (
-                    <div style={{ fontSize: 11.5, color: "#5c665c", paddingLeft: 21 }}>
-                      … a dalších {g.points.length - 3}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 12.5,
-                color: "#9aa596",
-                marginBottom: 18,
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={includeGroupName}
-                onChange={(e) => setIncludeGroupName(e.target.checked)}
-                style={{ accentColor: "#8fbf6f" }}
-              />
-              Přidat název trasy do jména kontaktu
-            </label>
-
             <button
-              onClick={download}
+              onClick={reset}
+              aria-label="Zrušit soubor"
               style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: "12px 16px",
-                borderRadius: 9,
+                background: "none",
                 border: "none",
-                background: "#8fbf6f",
-                color: "#0f1410",
-                fontSize: 13.5,
-                fontWeight: 700,
+                color: "var(--text-muted)",
                 cursor: "pointer",
-                letterSpacing: "0.01em",
+                padding: 4,
+                flexShrink: 0,
               }}
             >
-              <Download size={16} strokeWidth={2.5} />
-              Stáhnout .vcf
+              <X size={16} />
             </button>
           </div>
-        )}
-      </div>
+
+          <div
+            style={{
+              border: "1px solid var(--panel-border)",
+              borderRadius: 10,
+              padding: "12px 14px",
+              marginBottom: 16,
+              maxHeight: 180,
+              overflowY: "auto",
+            }}
+          >
+            {groups.map((g, i) => (
+              <div key={i} style={{ marginBottom: i < groups.length - 1 ? 10 : 0 }}>
+                <div style={{ fontSize: 12, color: "var(--accent)", marginBottom: 4 }}>
+                  {g.kind}: {g.name} ({g.points.length})
+                </div>
+                {g.points.slice(0, 10).map((p, j) => (
+                  <div
+                    key={j}
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-secondary)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingLeft: 4,
+                    }}
+                  >
+                    <MapPin size={11} />
+                    {p.label} · {Number(p.lat).toFixed(5)}, {Number(p.lon).toFixed(5)}
+                  </div>
+                ))}
+                {g.points.length > 10 && (
+                  <div style={{ fontSize: 11.5, color: "var(--text-muted)", paddingLeft: 21 }}>
+                    … a dalších {g.points.length - 3}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12.5,
+              color: "var(--text-secondary)",
+              marginBottom: 18,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={includeGroupName}
+              onChange={(e) => setIncludeGroupName(e.target.checked)}
+              style={{ accentColor: "var(--accent)" }}
+            />
+            Přidat název trasy do jména kontaktu
+          </label>
+
+          <button
+            onClick={download}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "12px 16px",
+              borderRadius: 9,
+              border: "none",
+              background: "var(--accent)",
+              color: "var(--accent-contrast)",
+              fontSize: 13.5,
+              fontWeight: 700,
+              cursor: "pointer",
+              letterSpacing: "0.01em",
+            }}
+          >
+            <Download size={16} strokeWidth={2.5} />
+            Stáhnout .vcf
+          </button>
+        </div>
+      )}
     </div>
   );
 }
