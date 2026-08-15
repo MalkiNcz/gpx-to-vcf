@@ -54,24 +54,51 @@ function escapeVcf(str) {
   return String(str).replace(/([,;\\])/g, "\\$1");
 }
 
-function buildVcf(groups, { includeGroupName }) {
+function buildVcf(groups, { includeGroupName, addresses }) {
   let out = "";
   for (const group of groups) {
-    for (const pt of group.points) {
-      if (!pt.lat || !pt.lon) continue;
-      const label = includeGroupName ? `${group.name} - ${pt.label}` : pt.label;
+    const pts = group.points.filter((pt) => pt.lat && pt.lon);
+    if (!pts.length) continue;
+
+    const addressOf = (pt) => addresses[pointKey(pt.lat, pt.lon)] || pt.label;
+    const routeName = `Trasa z ${addressOf(pts[0])} do ${addressOf(pts[pts.length - 1])}`;
+
+    pts.forEach((pt, idx) => {
+      const address = addressOf(pt);
+      const label = includeGroupName
+        ? `${routeName} - bod ${idx + 1} - ${address}`
+        : address;
       const safe = escapeVcf(label);
       out +=
         "BEGIN:VCARD\r\n" +
         "VERSION:3.0\r\n" +
-        `N:;${safe};;;\r\n` +
-        `FN:${safe}\r\n` +
+        `N;CHARSET=UTF-8:;${safe};;;\r\n` +
+        `FN;CHARSET=UTF-8:${safe}\r\n` +
         `GEO:${pt.lat},${pt.lon}\r\n` +
         "END:VCARD\r\n";
-    }
+    });
   }
   return out;
 }
+
+async function getAddress(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Nepodařilo se načíst adresu.");
+  return res.json();
+}
+
+function formatAddress(data) {
+  const addr = data?.address;
+  if (!addr) return data?.display_name || null;
+  const city = addr.city || addr.town || addr.village || addr.municipality;
+  return [addr.road, city].filter(Boolean).join(", ") || data.display_name || null;
+}
+
+const pointKey = (lat, lon) => `${lat},${lon}`;
+
+// Nominatim's usage policy allows ~1 request/second, so lookups run sequentially with a delay.
+const NOMINATIM_DELAY_MS = 1100;
 
 // --- UI ----------------------------------------------------------------------
 
@@ -81,9 +108,43 @@ export default function GpxToVcf() {
   const [error, setError] = useState("");
   const [includeGroupName, setIncludeGroupName] = useState(true);
   const [dragOver, setDragOver] = useState(false);
+  const [addresses, setAddresses] = useState({});
+  const [resolvingAddresses, setResolvingAddresses] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
   const inputRef = useRef(null);
+  const resolveGenRef = useRef(0);
 
   const totalPoints = groups ? groups.reduce((n, g) => n + g.points.length, 0) : 0;
+
+  const resolveAddresses = useCallback((parsedGroups) => {
+    const gen = ++resolveGenRef.current;
+    const points = [];
+    for (const g of parsedGroups) {
+      for (const p of g.points.slice(0, 10)) {
+        if (p.lat && p.lon) points.push(p);
+      }
+    }
+    setAddresses({});
+    if (!points.length) return;
+    setResolvingAddresses(true);
+
+    (async () => {
+      for (const p of points) {
+        if (resolveGenRef.current !== gen) return;
+        const key = pointKey(p.lat, p.lon);
+        try {
+          const data = await getAddress(p.lat, p.lon);
+          if (resolveGenRef.current !== gen) return;
+          setAddresses((prev) => ({ ...prev, [key]: formatAddress(data) || "Adresa nenalezena" }));
+        } catch {
+          if (resolveGenRef.current !== gen) return;
+          setAddresses((prev) => ({ ...prev, [key]: null }));
+        }
+        await new Promise((r) => setTimeout(r, NOMINATIM_DELAY_MS));
+      }
+      if (resolveGenRef.current === gen) setResolvingAddresses(false);
+    })();
+  }, []);
 
   const handleFile = useCallback((file) => {
     setError("");
@@ -104,6 +165,7 @@ export default function GpxToVcf() {
         }
         setGroups(parsed);
         setFileName(file.name);
+        resolveAddresses(parsed);
       } catch (err) {
         setError(err.message || "Soubor se nepodařilo zpracovat.");
         setGroups(null);
@@ -112,7 +174,7 @@ export default function GpxToVcf() {
     };
     reader.onerror = () => setError("Soubor se nepodařilo načíst.");
     reader.readAsText(file, "utf-8");
-  }, []);
+  }, [resolveAddresses]);
 
   const onDrop = useCallback(
     (e) => {
@@ -123,10 +185,44 @@ export default function GpxToVcf() {
     [handleFile]
   );
 
-  const download = useCallback(() => {
+  const download = useCallback(async () => {
     if (!groups) return;
-    const vcf = buildVcf(groups, { includeGroupName });
-    const blob = new Blob([vcf], { type: "text/vcard;charset=utf-8" });
+
+    // Collect every point missing a resolved address (preview only resolved the first 10/group).
+    const addrMap = { ...addresses };
+    const missing = [];
+    const seenKeys = new Set();
+    for (const g of groups) {
+      for (const p of g.points) {
+        if (!p.lat || !p.lon) continue;
+        const key = pointKey(p.lat, p.lon);
+        if (seenKeys.has(key) || key in addrMap) continue;
+        seenKeys.add(key);
+        missing.push({ p, key });
+      }
+    }
+
+    if (missing.length) {
+      setDownloadProgress({ done: 0, total: missing.length });
+      for (let i = 0; i < missing.length; i++) {
+        const { p, key } = missing[i];
+        try {
+          const data = await getAddress(p.lat, p.lon);
+          addrMap[key] = formatAddress(data) || p.label;
+        } catch {
+          addrMap[key] = p.label;
+        }
+        setAddresses((prev) => ({ ...prev, [key]: addrMap[key] }));
+        setDownloadProgress({ done: i + 1, total: missing.length });
+        if (i < missing.length - 1) await new Promise((r) => setTimeout(r, NOMINATIM_DELAY_MS));
+      }
+      setDownloadProgress(null);
+    }
+
+    const vcf = buildVcf(groups, { includeGroupName, addresses: addrMap });
+    // Leading BOM helps Windows-flavored vCard readers (Outlook, Contacts) detect UTF-8
+    // instead of falling back to the system codepage and mangling diacritics.
+    const blob = new Blob(["﻿" + vcf], { type: "text/vcard;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -135,12 +231,16 @@ export default function GpxToVcf() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }, [groups, includeGroupName, fileName]);
+  }, [groups, includeGroupName, fileName, addresses]);
 
   const reset = () => {
+    resolveGenRef.current++;
     setGroups(null);
     setFileName("");
     setError("");
+    setAddresses({});
+    setResolvingAddresses(false);
+    setDownloadProgress(null);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -289,22 +389,32 @@ export default function GpxToVcf() {
                 <div style={{ fontSize: 12, color: "var(--accent)", marginBottom: 4 }}>
                   {g.kind}: {g.name} ({g.points.length})
                 </div>
-                {g.points.slice(0, 10).map((p, j) => (
-                  <div
-                    key={j}
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-secondary)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      paddingLeft: 4,
-                    }}
-                  >
-                    <MapPin size={11} />
-                    {p.label} · {Number(p.lat).toFixed(5)}, {Number(p.lon).toFixed(5)}
-                  </div>
-                ))}
+                {g.points.slice(0, 10).map((p, j) => {
+                  const key = p.lat && p.lon ? pointKey(p.lat, p.lon) : null;
+                  const address = key ? addresses[key] : undefined;
+                  return (
+                    <div
+                      key={j}
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--text-secondary)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        paddingLeft: 4,
+                      }}
+                    >
+                      <MapPin size={11} />
+                      <span>
+                        {p.label} · {Number(p.lat).toFixed(5)}, {Number(p.lon).toFixed(5)}
+                        {address && ` · ${address}`}
+                        {address === undefined && resolvingAddresses && (
+                          <span style={{ color: "var(--text-muted)" }}> · načítám adresu…</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
                 {g.points.length > 10 && (
                   <div style={{ fontSize: 11.5, color: "var(--text-muted)", paddingLeft: 21 }}>
                     … a dalších {g.points.length - 3}
@@ -336,6 +446,7 @@ export default function GpxToVcf() {
 
           <button
             onClick={download}
+            disabled={!!downloadProgress}
             style={{
               width: "100%",
               display: "flex",
@@ -349,12 +460,15 @@ export default function GpxToVcf() {
               color: "var(--accent-contrast)",
               fontSize: 13.5,
               fontWeight: 700,
-              cursor: "pointer",
+              cursor: downloadProgress ? "default" : "pointer",
               letterSpacing: "0.01em",
+              opacity: downloadProgress ? 0.7 : 1,
             }}
           >
             <Download size={16} strokeWidth={2.5} />
-            Stáhnout .vcf
+            {downloadProgress
+              ? `Načítám adresy… ${downloadProgress.done}/${downloadProgress.total}`
+              : "Stáhnout .vcf"}
           </button>
         </div>
       )}
